@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Virtual Interview Simulator</title>
+    <!-- A-Frame v1.4.2 -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.3/dist/aframe-environment-component.min.js"></script>
+    
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #000; color: white; }
+        
+        /* Glassmorphism Classes */
+        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); padding: 20px; pointer-events: auto; }
+        .glass-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 12px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; font-weight: bold; font-family: inherit; }
+        .glass-btn:hover { background: rgba(139, 92, 246, 0.4); border-color: #8b5cf6; }
+        .glass-input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 15px; font-family: inherit; }
+
+        /* Onboarding Screen */
+        #onboarding-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 9999; background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%); transition: opacity 0.5s ease; }
+        .onboarding-panel { width: 400px; text-align: center; }
+        .onboarding-panel h1 { color: #8b5cf6; margin-top: 0; letter-spacing: 2px; font-size: 1.8rem; }
+        
+        /* HUD - Active Interview */
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; display: none; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; }
+        
+        #top-hud { display: flex; justify-content: space-between; align-items: flex-start; }
+        #progress-panel { width: 300px; }
+        .progress-title { font-size: 0.8rem; color: #a78bfa; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
+        .progress-val { font-size: 1.2rem; font-weight: bold; }
+        
+        /* Controls */
+        #controls-panel { display: flex; gap: 10px; pointer-events: auto; }
+        
+        /* Transcript / Subtitles */
+        #bottom-hud { display: flex; justify-content: center; padding-bottom: 20px; }
+        #transcript-panel { width: 60%; text-align: center; font-size: 1.2rem; display: none; }
+        #speaker-name { font-size: 0.8rem; color: #a78bfa; font-weight: bold; margin-bottom: 5px; letter-spacing: 1px; }
+
+        /* Analysis Screen */
+        #analysis-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; z-index: 9999; background: rgba(2, 6, 23, 0.9); backdrop-filter: blur(20px); }
+        .analysis-panel { width: 600px; text-align: center; }
+        .score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .score-box { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.3); }
+        .score-val { font-size: 2rem; font-weight: bold; color: #8b5cf6; }
+        
+        /* Crosshair */
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 1001; mix-blend-mode: difference; display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- Onboarding / Setup -->
+    <div id="onboarding-screen">
+        <div class="glass onboarding-panel">
+            <h1>AI INTERVIEW SIMULATOR</h1>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Prepare for your next role in an immersive Antigravity environment.</p>
+            
+            <input type="text" id="cand-name" class="glass-input" placeholder="Your Name" value="Candidate">
+            <input type="text" id="cand-role" class="glass-input" placeholder="Target Job Role" value="Frontend Developer">
+            <select id="cand-level" class="glass-input">
+                <option value="beginner">Beginner / Fresher</option>
+                <option value="intermediate" selected>Intermediate (1-3 yrs)</option>
+                <option value="advanced">Advanced (4+ yrs)</option>
+            </select>
+            
+            <button class="glass-btn" id="btn-enter" style="width: 100%; background: rgba(139, 92, 246, 0.3);">ENTER VIRTUAL OFFICE</button>
+            <p style="color: #64748b; font-size: 0.7rem; margin-top: 15px;">*Microphone access will be required for Speech-to-Text.</p>
+        </div>
+    </div>
+
+    <!-- Active HUD -->
+    <div id="hud">
+        <div id="top-hud">
+            <div id="progress-panel" class="glass">
+                <div class="progress-title">Interview Progress</div>
+                <div class="progress-val" id="hud-round">Waiting to start...</div>
+                <div style="color: #94a3b8; font-size: 0.8rem; margin-top: 5px;" id="hud-timer">00:00</div>
+            </div>
+            
+            <div id="controls-panel">
+                <button class="glass-btn" id="btn-mic" style="background: rgba(239, 68, 68, 0.3); border-color: #ef4444;">Mic: OFF</button>
+                <button class="glass-btn" id="btn-end">End Interview</button>
+            </div>
+        </div>
+        
+        <div id="bottom-hud">
+            <div id="transcript-panel" class="glass">
+                <div id="speaker-name">SYSTEM</div>
+                <div id="transcript-text" style="color: #f8fafc;">Approaching Interview Room...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Post-Interview Analysis -->
+    <div id="analysis-screen">
+        <div class="glass analysis-panel">
+            <h1 style="color: #8b5cf6;">PERFORMANCE REPORT</h1>
+            <h3 id="report-verdict" style="color: #10b981;">STRONG CANDIDATE</h3>
+            
+            <div class="score-grid">
+                <div class="score-box">
+                    <div style="color: #94a3b8; font-size: 0.8rem;">COMMUNICATION</div>
+                    <div class="score-val" id="score-comm">0/10</div>
+                </div>
+                <div class="score-box">
+                    <div style="color: #94a3b8; font-size: 0.8rem;">TECHNICAL KNOWLEDGE</div>
+                    <div class="score-val" id="score-tech">0/10</div>
+                </div>
+                <div class="score-box">
+                    <div style="color: #94a3b8; font-size: 0.8rem;">CONFIDENCE</div>
+                    <div class="score-val" id="score-conf">0/10</div>
+                </div>
+                <div class="score-box">
+                    <div style="color: #94a3b8; font-size: 0.8rem;">OVERALL SCORE</div>
+                    <div class="score-val" id="score-total" style="color: #10b981;">0%</div>
+                </div>
+            </div>
+            
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">*Scores are simulated based on conversational metrics and response length.</p>
+            <button class="glass-btn" onclick="location.reload()">RESTART SIMULATION</button>
+        </div>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <!-- A-Frame WebXR Scene -->
+    <a-scene 
+        id="scene"
+        background="color: #0f172a"
+        environment="preset: default; skyType: atmosphere; lighting: none; groundColor: #1e1b4b;"
+        renderer="antialias: true; colorManagement: true;"
+        cursor="rayOrigin: mouse"
+        raycaster="objects: .clickable"
+        webxr="referenceSpaceType: local-floor">
+        
+        <!-- Lights -->
+        <a-light type="ambient" color="#ffffff" intensity="0.4"></a-light>
+        <a-light type="directional" position="10 15 10" intensity="0.6" color="#c4b5fd" castShadow="true"></a-light>
+
+        <!-- Player Rig -->
+        <a-entity id="rig" position="0 0.1 20">
+            <a-camera id="camera" look-controls wasd-controls="acceleration: 10"></a-camera>
+            <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 20"></a-entity>
+            <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 20"></a-entity>
+        </a-entity>
+
+        <!-- Environment Architecture -->
+        <a-entity id="environment">
+            <!-- NavMesh / Floor -->
+            <a-plane class="navmesh" rotation="-90 0 0" width="50" height="50" color="#020617"></a-plane>
+            
+            <!-- Exterior Glass Approach -->
+            <a-entity id="exterior">
+                <a-box position="0 4 10" width="20" height="8" depth="0.2" color="#1e293b" material="opacity: 0.3; transparent: true"></a-box>
+                <a-box position="0 8 5" width="20" height="0.5" depth="10" color="#0f172a"></a-box>
+                <!-- Automatic Doors -->
+                <a-box id="doors-left" position="-2 2 10.1" width="4" height="4" depth="0.1" color="#8b5cf6" material="opacity: 0.5; transparent: true"></a-box>
+                <a-box id="doors-right" position="2 2 10.1" width="4" height="4" depth="0.1" color="#8b5cf6" material="opacity: 0.5; transparent: true"></a-box>
+                <a-text value="NEXUS INNOVATION HUB" position="0 6 10.2" align="center" width="12" color="#c4b5fd"></a-text>
+            </a-entity>
+
+            <!-- Hallway -->
+            <a-entity id="hallway">
+                <a-box position="-4 2 5" width="0.2" height="4" depth="10" color="#1e293b"></a-box>
+                <a-box position="4 2 5" width="0.2" height="4" depth="10" color="#1e293b"></a-box>
+            </a-entity>
+
+            <!-- Interview Room -->
+            <a-entity id="interview-room" position="0 0 -5">
+                <a-box position="0 5 -5" width="12" height="10" depth="10" color="#0f172a" material="side: back;"></a-box>
+                <a-box position="0 10 -5" width="12" height="0.5" depth="10" color="#020617"></a-box>
+                
+                <!-- Conference Table -->
+                <a-box position="0 0.8 -5" width="6" height="0.1" depth="3" color="#1e293b" shadow></a-box>
+                <a-cylinder position="0 0.4 -5" radius="0.5" height="0.8" color="#0f172a"></a-cylinder>
+
+                <!-- Candidate Chair -->
+                <a-box position="0 0.5 -2.5" width="0.6" height="0.1" depth="0.6" color="#334155"></a-box>
+                <a-box position="0 1 -2.2" width="0.6" height="1" depth="0.1" color="#334155"></a-box>
+
+                <!-- Antigravity / Floating UI inside room -->
+                <a-entity id="hologram-ui" position="0 2 -5" animation="property: position; to: 0 2.1 -5; dir: alternate; dur: 2000; loop: true">
+                    <a-plane width="3" height="1.5" color="#8b5cf6" material="opacity: 0.2; transparent: true"></a-plane>
+                    <a-text value="INTERVIEW IN PROGRESS" position="0 0.5 0.1" align="center" color="#c4b5fd" width="4"></a-text>
+                    <a-text id="holo-status" value="Connecting to AI Engine..." position="0 0 0.1" align="center" color="#ffffff" width="3"></a-text>
+                </a-entity>
+
+                <!-- Recruiters (Procedurally Composed) -->
+                <a-entity id="recruiters">
+                    <!-- Tech Recruiter (Center) -->
+                    <a-entity id="rec-tech" position="0 0 -6.5">
+                        <a-cylinder class="r-body" position="0 1 0" radius="0.4" height="1.2" color="#2563eb"></a-cylinder>
+                        <a-sphere class="r-head" position="0 1.9 0" radius="0.3" color="#f1c27d"></a-sphere>
+                        <!-- Holographic Name Tag -->
+                        <a-plane position="0 2.5 0" width="1.5" height="0.3" color="#1e3a8a" material="opacity: 0.6; transparent: true">
+                            <a-text value="DAVID (TECH)" align="center" width="3" position="0 0 0.05" color="#93c5fd"></a-text>
+                        </a-plane>
+                    </a-entity>
+                    
+                    <!-- HR Recruiter (Left) -->
+                    <a-entity id="rec-hr" position="-2 0 -6">
+                        <a-cylinder class="r-body" position="0 1 0" radius="0.35" height="1.1" color="#7c3aed"></a-cylinder>
+                        <a-sphere class="r-head" position="0 1.8 0" radius="0.28" color="#d8a06d"></a-sphere>
+                        <a-plane position="0 2.4 0" width="1.5" height="0.3" color="#4c1d95" material="opacity: 0.6; transparent: true">
+                            <a-text value="SARAH (HR)" align="center" width="3" position="0 0 0.05" color="#c4b5fd"></a-text>
+                        </a-plane>
+                    </a-entity>
+
+                    <!-- Manager (Right) -->
+                    <a-entity id="rec-mgr" position="2 0 -6">
+                        <a-cylinder class="r-body" position="0 1 0" radius="0.45" height="1.25" color="#059669"></a-cylinder>
+                        <a-sphere class="r-head" position="0 1.95 0" radius="0.32" color="#c68642"></a-sphere>
+                        <a-plane position="0 2.6 0" width="1.5" height="0.3" color="#064e3b" material="opacity: 0.6; transparent: true">
+                            <a-text value="PRIYA (MANAGER)" align="center" width="3" position="0 0 0.05" color="#6ee7b7"></a-text>
+                        </a-plane>
+                    </a-entity>
+                </a-entity>
+
+            </a-entity>
+        </a-entity>
+    </a-scene>
+
+    <script>
+        // --- 1. CONFIG & STATE ---
+        const AppState = {
+            candidate: { name: '', role: '', level: '' },
+            interviewStarted: false,
+            micActive: false,
+            currentRound: 0,
+            startTime: 0,
+            timerInterval: null,
+            recognition: null,
+            synthesis: window.speechSynthesis,
+            metrics: { comm: 0, tech: 0, conf: 0 }
+        };
+
+        const InterviewRounds = [
+            { round: "Self-Introduction", speaker: "rec-hr", name: "SARAH", q: "Welcome to Nexus. Can you start by telling us a bit about yourself?" },
+            { round: "Technical Evaluation", speaker: "rec-tech", name: "DAVID", q: "Looking at your role, how would you architect a highly scalable frontend application using modern web standards?" },
+            { round: "Problem Solving", speaker: "rec-tech", name: "DAVID", q: "If you faced a critical performance bottleneck in production, what steps would you take to debug and resolve it?" },
+            { round: "Behavioral", speaker: "rec-mgr", name: "PRIYA", q: "Tell me about a time you had a disagreement with a team member. How did you handle it?" },
+            { round: "Conclusion", speaker: "rec-hr", name: "SARAH", q: "Thank you. Do you have any questions for us regarding the role or company?" }
+        ];
+
+        // --- 2. INITIALIZATION & ONBOARDING ---
+        document.getElementById('btn-enter').addEventListener('click', () => {
+            AppState.candidate.name = document.getElementById('cand-name').value || 'Candidate';
+            AppState.candidate.role = document.getElementById('cand-role').value || 'Developer';
+            AppState.candidate.level = document.getElementById('cand-level').value;
+            
+            document.getElementById('onboarding-screen').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('onboarding-screen').style.display = 'none';
+                document.getElementById('hud').style.display = 'flex';
+                document.getElementById('crosshair').style.display = 'block';
+                setupSpeechRecognition();
+                startSequence();
+            }, 500);
+        });
+
+        // --- 3. ENVIRONMENT SEQUENCE (Entering Building) ---
+        function startSequence() {
+            const rig = document.getElementById('rig');
+            
+            // Open doors
+            document.getElementById('doors-left').setAttribute('animation', 'property: position; to: -4 2 10.1; dur: 2000; easing: easeInOutQuad');
+            document.getElementById('doors-right').setAttribute('animation', 'property: position; to: 4 2 10.1; dur: 2000; easing: easeInOutQuad');
+            
+            showTranscript("SYSTEM", "Entering Nexus Innovation Hub...");
+            
+            // Animate rig walking to chair
+            setTimeout(() => {
+                rig.setAttribute('animation', 'property: position; to: 0 0.1 -2; dur: 6000; easing: easeInOutQuad');
+            }, 1000);
+
+            setTimeout(() => {
+                document.getElementById('holo-status').setAttribute('value', 'AI Engine Connected. Ready.');
+                startInterview();
+            }, 8000);
+        }
+
+        // --- 4. INTERVIEW ENGINE & WEB SPEECH API ---
+        function setupSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+                AppState.recognition = new SpeechRec();
+                AppState.recognition.continuous = false;
+                AppState.recognition.interimResults = true;
+                
+                AppState.recognition.onresult = (event) => {
+                    let transcript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        transcript += event.results[i][0].transcript;
+                    }
+                    showTranscript(AppState.candidate.name.toUpperCase(), transcript);
+                    
+                    if (event.results[0].isFinal) {
+                        handleCandidateAnswer(transcript);
+                    }
+                };
+                
+                AppState.recognition.onend = () => {
+                    if (AppState.micActive && AppState.interviewStarted) {
+                        AppState.recognition.start(); // keep listening if active
+                    }
+                };
+            } else {
+                console.warn("Speech Recognition API not supported in this browser.");
+            }
+            
+            // Mic Toggle
+            const micBtn = document.getElementById('btn-mic');
+            micBtn.addEventListener('click', () => {
+                AppState.micActive = !AppState.micActive;
+                if(AppState.micActive) {
+                    micBtn.innerText = "Mic: ON";
+                    micBtn.style.backgroundColor = "rgba(16, 185, 129, 0.3)";
+                    micBtn.style.borderColor = "#10b981";
+                    if(AppState.recognition) AppState.recognition.start();
+                } else {
+                    micBtn.innerText = "Mic: OFF";
+                    micBtn.style.backgroundColor = "rgba(239, 68, 68, 0.3)";
+                    micBtn.style.borderColor = "#ef4444";
+                    if(AppState.recognition) AppState.recognition.stop();
+                }
+            });
+        }
+
+        function speak(text, pitch = 1, rate = 0.9) {
+            if (AppState.synthesis) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.pitch = pitch;
+                utterance.rate = rate;
+                // Optional: Find specific voices here if needed
+                AppState.synthesis.speak(utterance);
+            }
+        }
+
+        // --- 5. INTERVIEW LOGIC ---
+        function startInterview() {
+            AppState.interviewStarted = true;
+            AppState.startTime = Date.now();
+            AppState.timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - AppState.startTime) / 1000);
+                const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                const secs = String(elapsed % 60).padStart(2, '0');
+                document.getElementById('hud-timer').innerText = `${mins}:${secs}`;
+            }, 1000);
+            
+            setTimeout(nextQuestion, 2000);
+        }
+
+        function nextQuestion() {
+            if (AppState.currentRound >= InterviewRounds.length) {
+                endInterview();
+                return;
+            }
+            
+            const roundData = InterviewRounds[AppState.currentRound];
+            document.getElementById('hud-round').innerText = `Round ${AppState.currentRound + 1}: ${roundData.round}`;
+            document.getElementById('holo-status').setAttribute('value', `Topic: ${roundData.round}`);
+            
+            // Recruiter Animation (Speaking)
+            const recHead = document.querySelector(`#${roundData.speaker} .r-head`);
+            if (recHead) {
+                recHead.setAttribute('animation', 'property: position; dir: alternate; dur: 300; loop: 5; to: 0 2.05 0');
+                // Color pulse
+                recHead.setAttribute('animation__col', 'property: color; dir: alternate; dur: 300; loop: 5; to: #ffffff');
+            }
+            
+            showTranscript(roundData.name, roundData.q);
+            
+            // Voice characteristics based on recruiter
+            let pitch = 1;
+            if (roundData.name === "SARAH") pitch = 1.2;
+            if (roundData.name === "DAVID") pitch = 0.8;
+            if (roundData.name === "PRIYA") pitch = 1.0;
+            
+            speak(roundData.q, pitch);
+            
+            // Wait for candidate answer (mock delay if mic not active, otherwise mic handles it)
+            if (!AppState.micActive) {
+                setTimeout(() => {
+                    showTranscript("SYSTEM", "(Waiting for response... enable Mic or Press Space to skip)");
+                }, 5000);
+            }
+        }
+
+        function handleCandidateAnswer(transcript) {
+            // Placeholder for LLM Analysis API
+            // In demo, we just assess length for fake scoring
+            const words = transcript.split(' ').length;
+            
+            if (words > 10) AppState.metrics.comm += 2;
+            if (transcript.toLowerCase().includes('scalable') || transcript.toLowerCase().includes('debug')) AppState.metrics.tech += 2;
+            if (words > 20) AppState.metrics.conf += 2;
+            
+            AppState.recognition.stop(); // Stop listening while recruiter responds
+            
+            // Recruiter reaction (Nodding / Green pulse)
+            const roundData = InterviewRounds[AppState.currentRound];
+            const recHead = document.querySelector(`#${roundData.speaker} .r-head`);
+            if (recHead) {
+                recHead.setAttribute('animation', 'property: position; dir: alternate; dur: 400; loop: 3; to: 0 1.8 0.2');
+            }
+            
+            setTimeout(() => {
+                AppState.currentRound++;
+                nextQuestion();
+                if(AppState.micActive && AppState.currentRound < InterviewRounds.length) AppState.recognition.start();
+            }, 3000);
+        }
+
+        // Spacebar to skip answer for demo testing
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && AppState.interviewStarted) {
+                handleCandidateAnswer("This is a simulated mock answer to proceed the interview flow.");
+            }
+        });
+
+        // --- 6. HUD & ANALYTICS ---
+        function showTranscript(speaker, text) {
+            const panel = document.getElementById('transcript-panel');
+            panel.style.display = 'block';
+            document.getElementById('speaker-name').innerText = speaker;
+            document.getElementById('transcript-text').innerText = text;
+        }
+
+        document.getElementById('btn-end').addEventListener('click', endInterview);
+
+        function endInterview() {
+            AppState.interviewStarted = false;
+            clearInterval(AppState.timerInterval);
+            if(AppState.recognition) AppState.recognition.stop();
+            
+            document.getElementById('hud').style.display = 'none';
+            document.getElementById('crosshair').style.display = 'none';
+            
+            // Calculate mock scores
+            const comm = Math.min(10, Math.max(4, AppState.metrics.comm));
+            const tech = Math.min(10, Math.max(3, AppState.metrics.tech));
+            const conf = Math.min(10, Math.max(5, AppState.metrics.conf));
+            const total = Math.round(((comm + tech + conf) / 30) * 100);
+            
+            document.getElementById('score-comm').innerText = `${comm}/10`;
+            document.getElementById('score-tech').innerText = `${tech}/10`;
+            document.getElementById('score-conf').innerText = `${conf}/10`;
+            document.getElementById('score-total').innerText = `${total}%`;
+            
+            const verdict = document.getElementById('report-verdict');
+            if (total >= 80) { verdict.innerText = "STRONG CANDIDATE"; verdict.style.color = "#10b981"; }
+            else if (total >= 50) { verdict.innerText = "POTENTIAL CANDIDATE"; verdict.style.color = "#f59e0b"; }
+            else { verdict.innerText = "NEEDS IMPROVEMENT"; verdict.style.color = "#ef4444"; }
+            
+            document.getElementById('analysis-screen').style.display = 'flex';
+        }
+
+    </script>
+</body>
+</html>
